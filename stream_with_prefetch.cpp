@@ -210,8 +210,8 @@ template <typename Vector, typename Policy>
 std::vector<std::vector<double> >
 numa_domain_worker(std::size_t domain,
     Policy policy,
-    hpx::lcos::local::latch& l,
-    std::size_t part_size, std::size_t offset, std::size_t iterations,
+    hpx::lcos::local::latch& l, int vector_size,
+    std::size_t part_size, std::size_t offset, std::size_t iterations, std::size_t prefetch_distance_factor,
     Vector& a, Vector& b, Vector& c)
 {
     typedef typename Vector::iterator iterator;
@@ -302,21 +302,23 @@ numa_domain_worker(std::size_t domain,
     // Main Loop
     std::vector<std::vector<double> > timing(8, std::vector<double>(iterations));
 
-    std::size_t prefetch_distance_factor = 1;
-    std::size_t minimum_chunk_size = 64 / sizeof(STREAM_TYPE);
-    std::size_t chunk_size = prefetch_distance_factor * minimum_chunk_size;
-    long int vector_size = 1024;
-    int chunk_count = vector_size / chunk_size;
-    auto original_range=boost::irange(0,1024);
-    auto unroll_range=boost::irange(0,chunk_count);
+    /// parameters needed for comparing different for_each styles
+    //minimum chunk_size is chosen with : cashe_size_line / sizeof(type)
+    std::size_t minimum_chunk_size = 64 / sizeof(STREAM_TYPE); 
+    //There is prefetch_distance_factor number of minimum_chunk_sizes within each chunk 
+    std::size_t chunk_size = prefetch_distance_factor * minimum_chunk_size; 
+    //number of chunk_size in data
+    int chunk_count = vector_size / chunk_size; 
+    //This range is used for Triad_for_each_1 and Triad_for_each_2
+    auto original_range=boost::irange(0,vector_size); 
+    //This range is used for Triad_prefetch_for_each_2_old_iterator
+    //using std::iterator and with prefetching data within loop
+    auto unroll_range=boost::irange(0,chunk_count);						   
+    //This range is used for Triad_prefetch_for_each_2_new_it using 
+    //prefetching_iterator and with prefetching data within prefetching_iterator
+    auto ctx = hpx::parallel::util::detail::make_prefetcher_context(0,vector_size,prefetch_distance_factor,{a.data(),b.data(),c.data()}); 
+														   
 
-    ////////////////////
-    std::vector<double> my_a(vector_size,1.2);
-    std::vector<double> my_b(vector_size,3.2);
-    std::vector<double> my_c(vector_size,1.5);
-    ////////////////////
-
-    auto ctx = hpx::parallel::util::detail::make_prefetcher_context(0,1024,1,{my_a.data(),my_b.data(),my_c.data()});
 
     double scalar = 3.0;
     for(std::size_t iteration = 0; iteration != iterations; ++iteration)
@@ -374,18 +376,18 @@ numa_domain_worker(std::size_t domain,
 
         timing[4][iteration] = mysecond() - timing[4][iteration];
 
-        // Triad_for_each_with my vector	
-        timing[5][iteration] = mysecond();/
+        // Triad_for_each_2	
+        timing[5][iteration] = mysecond();
 	hpx::parallel::for_each(hpx::parallel::par,
             original_range.begin(), original_range.end(),
             [&](std::size_t i)
             {
-                my_a[i]=my_b[i]+my_c[i]*2.5;	
+                a[i]=b[i]+c[i]*2.5;	
             }
 	);
         timing[5][iteration] = mysecond() - timing[5][iteration];
 
-        // Triad_prefetch_for_each_with my vector_old_iterator
+        // Triad_prefetch_for_each_2_old_iterator
         timing[6][iteration] = mysecond();
 
 	hpx::parallel::for_each(hpx::parallel::par,
@@ -399,22 +401,23 @@ numa_domain_worker(std::size_t domain,
 			std::size_t from = i * chunk_size;
 			std::size_t to = from + chunk_size;
 			for(int j=from ; j<std::min(to,a.size()); ++j)	
-				my_a[j]=my_b[j]+my_c[j] * 2.5;
+				a[j]=b[j]+c[j] * 2.5;
 		});
 
 
         timing[6][iteration] = mysecond() - timing[6][iteration];
 
-        // Triad_prefetch_for_each_with my vector_new_iterator	
+        // Triad_prefetch_for_each_2_new_iterator	
         timing[7][iteration] = mysecond();
+
 	hpx::parallel::for_each(hpx::parallel::par,
 		ctx.begin(), ctx.end(),
 		[&](std::size_t i)
 		{			
 			std::size_t from = i ;
 			std::size_t to = from + chunk_size;
-			for(int j=from ; j<std::min(to,a.size())+1; ++j)	
-				my_a[j]= my_b[j]+my_c[j] * 2.5;
+			for(int j=from ; j< std::min(to,a.size()); ++j)	
+				a[j]= b[j]+c[j] * 2.5;
 		}
 	);
 
@@ -470,6 +473,7 @@ int hpx_main(boost::program_options::variables_map& vm)
     std::size_t vector_size = vm["vector_size"].as<std::size_t>();
     std::size_t offset = vm["offset"].as<std::size_t>();
     std::size_t iterations = vm["iterations"].as<std::size_t>();
+    std::size_t prefetch_distance_factor = vm["prefetch_distance_factor"].as<std::size_t>();
 
     std::string num_numa_domains_str = vm["stream-numa-domains"].as<std::string>();
 
@@ -545,7 +549,7 @@ int hpx_main(boost::program_options::variables_map& vm)
             workers.push_back(
                 hpx::async(execs[i], &numa_domain_worker<vector_type, decltype(policy)>,
                     i, policy, boost::ref(l),
-                    part_size, part_size*i, iterations,
+                    vector_size, part_size, part_size*i, iterations, prefetch_distance_factor,
                     boost::ref(a), boost::ref(b), boost::ref(c))
             );
         }
@@ -555,7 +559,7 @@ int hpx_main(boost::program_options::variables_map& vm)
             workers.push_back(
                 hpx::async(execs[i], &numa_domain_worker<vector_type, decltype(policy)>,
                     i, policy, boost::ref(l),
-                    part_size, part_size*i, iterations,
+                    vector_size, part_size, part_size*i, iterations, prefetch_distance_factor,
                     boost::ref(a), boost::ref(b), boost::ref(c))
             );
         }
@@ -565,7 +569,7 @@ int hpx_main(boost::program_options::variables_map& vm)
             workers.push_back(
                 hpx::async(execs[i], &numa_domain_worker<vector_type, decltype(policy)>,
                     i, policy, boost::ref(l),
-                    part_size, part_size*i, iterations,
+                    vector_size, part_size, part_size*i, iterations, prefetch_distance_factor,
                     boost::ref(a), boost::ref(b), boost::ref(c))
             );
         }
@@ -576,7 +580,7 @@ int hpx_main(boost::program_options::variables_map& vm)
             workers.push_back(
                 hpx::async(execs[i], &numa_domain_worker<vector_type, decltype(policy)>,
                     i, policy, boost::ref(l),
-                    part_size, part_size*i, iterations,
+                    vector_size, part_size, part_size*i, iterations, prefetch_distance_factor,
                     boost::ref(a), boost::ref(b), boost::ref(c))
             );
         }
@@ -588,14 +592,14 @@ int hpx_main(boost::program_options::variables_map& vm)
 
     /* --- SUMMARY --- */
     const char *label[8] = {
-        "Copy:                            ",
-        "Scale:                           ",
-        "Add:                             ",
-        "Triad_transform:                 ",
-        "Triad_for_each_old_Vec:          ",
-        "Triad_for_each_my_Vec:           ",
-        "Triad_prefetch_for_each_old_it:  ",
-        "Triad_prefetch_for_each_new_it:  "
+        "Copy:                              ",
+        "Scale:                             ",
+        "Add:                               ",
+        "Triad_transform:                   ",
+        "Triad_for_each_1:                  ",
+        "Triad_for_each_2:                  ",
+        "Triad_prefetch_for_each_2_old_it:  ",
+        "Triad_prefetch_for_each_2_new_it:  "
     };
 
     const double bytes[8] = {
@@ -701,6 +705,9 @@ int main(int argc, char* argv[])
         (   "iterations",
             boost::program_options::value<std::size_t>()->default_value(10),
             "number of iterations to repeat each test. (default: 10)")
+	(   "prefetch_distance_factor",
+            boost::program_options::value<std::size_t>()->default_value(1),
+            "Distance (in chunk_size) between each preteching data. (default: 1)")
         (   "stream-threads",
             boost::program_options::value<std::string>()->default_value("all"),
             "number of threads per NUMA domain to use. (default: all)")
