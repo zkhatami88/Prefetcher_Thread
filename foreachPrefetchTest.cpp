@@ -1,4 +1,4 @@
-//  Copyright (c) 2014 Hartmut Kaiser
+//  Copyright (c) 2016 Zahra Khatami, Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -26,7 +26,8 @@ void test_for_each_with_prefetching(ExPolicy policy, IteratorTag)
     std::size_t prefetch_distance_factor = 20;
     std::vector<double> c(10007,1.0);
     std::vector<double> b(10007,1.0);
-    auto ctx_1 = hpx::parallel::util::detail::make_prefetcher_context<double>(0,10007,{c.data()},prefetch_distance_factor); 
+    auto ctx_1 = hpx::parallel::util::detail::make_prefetcher_context<double>
+				(0,10007,{c.data()},prefetch_distance_factor); 
     auto ctx_2 = hpx::parallel::util::detail::make_prefetcher_context<double>(0,10007,{b.data()}); 
 
 
@@ -83,7 +84,8 @@ void test_for_each_with_prefetching_async(ExPolicy p, IteratorTag)
     std::size_t prefetch_distance_factor = 20;
     std::vector<double> c(10007,1.0);
     std::vector<double> b(10007,1.0);
-    auto ctx_1 = hpx::parallel::util::detail::make_prefetcher_context<double>(0,10007,{c.data()},prefetch_distance_factor); 
+    auto ctx_1 = hpx::parallel::util::detail::make_prefetcher_context<double>
+				(0,10007,{c.data()},prefetch_distance_factor); 
     auto ctx_2 = hpx::parallel::util::detail::make_prefetcher_context<double>(0,10007,{b.data()}); 
 
 
@@ -134,7 +136,7 @@ void test_for_each_with_prefetching_test()
 {
     using namespace hpx::parallel;
 
-    //test_for_each_with_prefetching(seq, IteratorTag());
+    //test_for_each_with_prefetching(seq, IteratorTag()); //loop_n is not called for seq policy
     test_for_each_with_prefetching(par, IteratorTag());
     test_for_each_with_prefetching(par_vec, IteratorTag());
 
