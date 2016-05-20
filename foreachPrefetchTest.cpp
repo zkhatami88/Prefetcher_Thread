@@ -23,7 +23,7 @@ void test_for_each_with_prefetching(ExPolicy policy, IteratorTag)
     typedef hpx::parallel::util::detail::prefetching_iterator<double> base_iterator;
     typedef test::test_iterator<base_iterator, IteratorTag> iterator;
 
-    std::size_t prefetch_distance_factor = 20;
+    std::size_t prefetch_distance_factor = 1;
     std::vector<double> c(10007,1.0);
     std::vector<double> b(10007,1.0);
     auto ctx_1 = hpx::parallel::util::detail::make_prefetcher_context<double>
@@ -50,7 +50,7 @@ void test_for_each_with_prefetching(ExPolicy policy, IteratorTag)
             b[i] = 42.1;
         });
 
-    base_iterator result2 = hpx::parallel::for_each(policy,
+    iterator result2 = hpx::parallel::for_each(policy,
             ctx_2.begin(), ctx_2.end(),
             [](std::size_t i) {});
 //    HPX_TEST( result2 == iterator(ctx_2.end()) ); //it fails, why??
