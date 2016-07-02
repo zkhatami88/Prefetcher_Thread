@@ -478,8 +478,8 @@ int main(int argc, char* argv[])
 
     cmdline.add_options()
         (   "iterations",
-            boost::program_options::value<std::size_t>()->default_value(10),
-            "iterations (default: 10)")
+            boost::program_options::value<std::size_t>()->default_value(1000),
+            "iterations (default: 1000)")
         (   "threads",
             boost::program_options::value<std::string>()->default_value("all"),
             "number of threads per NUMA domain to use. (default: all)")
