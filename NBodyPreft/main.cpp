@@ -490,8 +490,8 @@ int main(int argc, char* argv[])
             boost::program_options::value<std::size_t>()->default_value(20),
             "Distance (in chunk_size) between each preteching data. (default: 1)")
         (   "range_size",
-            boost::program_options::value<std::size_t>()->default_value(10000),
-            "size of range. (default: 10000)")
+            boost::program_options::value<std::size_t>()->default_value(100000000),
+            "size of range. (default: 100000000)")
         (   "problem_size",
             boost::program_options::value<std::size_t>()->default_value(100000000),
             "size of problem. (default: 100000000)")
